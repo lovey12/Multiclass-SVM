@@ -1,4 +1,3 @@
-// custom node 
 package peersim.MultiSvm;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -36,7 +35,7 @@ public class MyNode implements Node {
 		// The protocols on current node
 		protected Protocol[] protocol = null;
 		
-		public HashSet ClassSet= new HashSet();
+		public static HashSet ClassSet= new HashSet();
 		
 		public double frobenius_norm= 0.0;
 
@@ -47,6 +46,9 @@ public class MyNode implements Node {
 	 * @config
 	 */
 	private static final String PAR_PATH = "resourcepath";
+	
+	  private static final String PAR_SIZE = "network.size";
+
 
 	/** used to generate unique IDs */
 	private static long counter = -1;
@@ -59,14 +61,15 @@ public class MyNode implements Node {
 	public int num_class; //total no. of classes
 	
 	public int num_Att;
+	public static  int c;
 	
-	
+	public int count=0;
 	private int index; // current index of any node
 
 	/**
 	 * The fail state of the node.
 	 */
-	//protected int failstate = Fallible.OK;
+	protected int failstate = Fallible.OK;
 
 	
 	private long ID; //The ID of the node.
@@ -76,6 +79,8 @@ public class MyNode implements Node {
 	 * directory. later it should be taken from configuration file.
 	 */
 	/** Learning parameter */
+	protected int N;
+	public int max_class=10;
 	protected double lambda=0.01;
 	/** Learning rate */
 	protected double alpha=0.02;
@@ -86,14 +91,10 @@ public class MyNode implements Node {
 	public MyNode(String prefix) 
 	{
 		String[] names = Configuration.getNames(PAR_PROT); // protocol
-		System.out.println(names.length);
-		for(int a=0;a<names.length;a++)
-		{
-			System.out.println(names[a]);
-		}
-			
+		
 		
 		resourcepath = (String)Configuration.getString(prefix + "." + PAR_PATH);
+		//N= Configuration.getInt(prefix + "."+PAR_SIZE);
 		System.out.println("Data is saved in: " + resourcepath + "\n"); //
 		CommonState.setNode(this); //sets current node
 		protocol = new Protocol[names.length];
@@ -119,20 +120,45 @@ public class MyNode implements Node {
 	@Override
 	public int getFailState() {
 		// TODO Auto-generated method stub
-		return 0;
+		return failstate;
 	}
 
 	@Override
 	public boolean isUp() {
 		// TODO Auto-generated method stub
-		return false;
+		return failstate==OK;
 	}
 
 	@Override
-	public void setFailState(int arg0) {
-		// TODO Auto-generated method stub
+	public void setFailState(int failState) 
+	{
+			// after a node is dead, all operations on it are errors by definition
+			if(failstate==DEAD && failState!=DEAD) throw new IllegalStateException(
+					"Cannot change fail state: node is already DEAD");
+			switch(failState)
+			{
+			case OK:
+				failstate=OK;
+				break;
+			case DEAD:
+				//protocol = null;
+				index = -1;
+				failstate = DEAD;
+				for(int i=0;i<protocol.length;++i)
+					if(protocol[i] instanceof Cleanable)
+						((Cleanable)protocol[i]).onKill();
+				break;
+			case DOWN:
+				failstate = DOWN;
+				break;
+			default:
+				throw new IllegalArgumentException(
+						"failState="+failState);
+			}
+			
+		}
 		
-	}
+	
 
 	@Override
 	public long getID() {
@@ -155,7 +181,7 @@ public class MyNode implements Node {
 	@Override
 	public int protocolSize() {
 		// TODO Auto-generated method stub
-		return protocol.length;
+		return getProtocol().length;
 	}
 
 	@Override
@@ -174,7 +200,7 @@ public class MyNode implements Node {
 	private Protocol[] getProtocol() {
 		return protocol;
 	}
-	private void setProtocol(Protocol[] protocols) {
+	private void setProtocol(Protocol[] protocol) {
 		this.protocol = protocol;
 		
 	}
@@ -189,7 +215,7 @@ public class MyNode implements Node {
 			e.printStackTrace();
 			} 
 		result.setProtocol(new Protocol[protocol.length]);
-		//System.out.println("protocol"+protocol.length);
+	
 		CommonState.setNode(result);
 		result.setID(nextID());
 			
@@ -208,10 +234,10 @@ try{
     
     // printing the number of attributes
      num_Att = data.numAttributes()-1;
-    System.out.println("Number of Attributes at node "+result.getID()+" :"+num_Att+ "\n");
+    System.out.println("Number of Attributes at node "+result.getID()+" "+num_Att+ "\n");
     //total number of instances
     int num_Instance=data.numInstances();
-    System.out.println("Number of instances at node "+result.getID()+" :"+num_Instance+ "\n");
+    System.out.println("Number of instances at node "+result.getID()+" "+num_Instance+ "\n");
     	     
     //set the last attribute to be the class attribute
     int label=data.numAttributes();
@@ -229,17 +255,17 @@ try{
     	ClassSet.add(y);
     	
     } 
-    int c=ClassSet.size();
-    System.out.println("\n");
-    //System.out.println("The Total number of known class:"+c);
-     
+   
     
-    //Initialize the weight vector dxc dimension where d is the number of attributes and c is the total number of classes
-    wtVec = new double[num_Att][ClassSet.size()];
+    //System.out.println("The Total number of known class:"+c);
+    num_Att=data.numAttributes()-1;
+    
+    //Initialize the weight vector dxc dimension where d is the num ber of attributes and c is the total number of classes
+    wtVec = new double[num_Att][max_class];
 	    
     for(int j=0; j<num_Att; j++)
     { 
-    	for(int k=0;k<ClassSet.size();k++)
+    	for(int k=0;k<max_class;k++)
         {
     	wtVec[j][k]=1;
     	 
@@ -248,15 +274,23 @@ try{
 
 	 //MyNode n =(MyNode) node;
 	 num_Att=data.numAttributes()-1;
-	 num_class=ClassSet.size();
-    local_sgd = new double[num_Att][num_class];
+	 //num_class=ClassSet.size();
+    local_sgd = new double[num_Att][max_class];
+    for (int row = 0; row < num_Att; row ++)
+    {
+   	    for (int col = 0; col < max_class; col++)
+   	    {
+   	        local_sgd[row][col] = 0.0;
+   	        		
+   	    }    	
+    }
     
     //System.out.println(num_class);
   //Building the local model and calculating the local subgradient at each node
-    local_loss_sgd=new double[num_Att][num_class];// the gradient matrix
+    local_loss_sgd=new double[num_Att][max_class];// the gradient matrix
     for (int row = 0; row < num_Att; row ++)
     {
-   	    for (int col = 0; col < num_class; col++)
+   	    for (int col = 0; col < max_class; col++)
    	    {
    	        local_loss_sgd[row][col] = 0.0;
    	        		
@@ -272,10 +306,11 @@ try{
 		{
 			double dot_prod=0.0;
 			
-			double [] wx= new double[num_class];
+			double [] wx= new double[max_class];
 			int x_size= data.numAttributes()-1;
 			y=data.instance(i).classValue();
-			for(int c1=0;c1<num_class;c1++)
+			System.out.println("the value of label for input:"+i+"is"+y);
+			for(int c1=0;c1<max_class;c1++)
 			{
 			
 			  for (int xiter = 0; xiter < x_size; xiter++) 
@@ -288,10 +323,11 @@ try{
 					dot_prod =dot_prod +( xval * wval);
 				}// dot product loop end
 		     wx[c1]=dot_prod;
-		     System.out.println("the dot product for instance"+"["+i+"]"+"and class"+c1+"is:"+wx[c1]+"\n");
+		     dot_prod=0.0;
+		     System.out.println("The dot product at "+result.getID()+"for input:"+ i+"is "+wx[c1]+" \n ");
           }       
 			double max=0.0;
-			for(int z=0;z<num_class;z++)
+			for(int z=0;z<max_class;z++)
 			{
 				if(max<wx[z])
 				{
@@ -301,9 +337,9 @@ try{
 			}
 			System.out.println(r);
 			//for each training example compute the gradient
-			double[][] sgd=new double[x_size][num_class];
+			double[][] sgd=new double[x_size][max_class];
 			
-			for(int c1=0;c1<num_class;c1++)
+			for(int c1=0;c1<max_class;c1++)
 			{
 			  for (int xiter = 0; xiter < x_size; xiter++) 
 			     { //inner loop input value
@@ -329,7 +365,7 @@ try{
        }
 		for (int row = 0; row < num_Att; row ++)
 	     {
-	    	    for (int col = 0; col < num_class; col++)
+	    	    for (int col = 0; col < max_class; col++)
 	    	    {
 		            local_loss_sgd[row][col]=(local_loss_sgd[row][col]/N);
 		            wtVec[row][col]=(wtVec[row][col])*lambda;
@@ -337,16 +373,16 @@ try{
         }
 		for (int row = 0; row < num_Att; row ++)
 	     {
-	    	    for (int col = 0; col < num_class; col++)
+	    	    for (int col = 0; col < max_class; col++)
 	    	    {
 	    	    	local_sgd[row][col]=wtVec[row][col]+ local_loss_sgd[row][col];
-	    	    	System.out.println("summation of local loss sgd and wtvector: "+local_sgd[row][col]);
+	    	    	System.out.println("summation of local loss sgd and p(w): "+local_sgd[row][col]);
 	    	    }
 	     }
-		double [][] newval=new double[num_Att][num_class];
+		double [][] newval=new double[num_Att][max_class];
 		for (int row = 0; row < num_Att; row ++)
 	     {
-	    	    for (int col = 0; col < num_class; col++)
+	    	    for (int col = 0; col < max_class; col++)
 	    	    {
 	    	    	newval[row][col]=0.0;
 	    	    }
@@ -355,7 +391,7 @@ try{
 		// calculating updated weight vector which is w(new)=w(old)-(alpha*(local_sgd))
 		for (int row = 0; row < num_Att; row ++)
 	     {
-	    	    for (int col = 0; col < num_class; col++)
+	    	    for (int col = 0; col <max_class; col++)
 	    	    {
 	    	    	newval[row][col]=alpha*(local_sgd[row][col]);
 	    	    	//System.out.println(newval[row][col]);
@@ -363,12 +399,21 @@ try{
 	    }
 		for (int row = 0; row < num_Att; row ++)
 	     {
-	    	    for (int col = 0; col < num_class; col++)
+	    	    for (int col = 0; col < max_class; col++)
 	    	    {
 	    	    	wtVec[row][col]=wtVec[row][col]-newval[row][col];
-	    	    	System.out.println("the updated wtvector computed at each node locally"+"is:"+wtVec[row][col]);
+	    	    	System.out.println(wtVec[row][col]);
 	    	    }
 	     }
+//		for (int row = 0; row < num_Att; row ++)
+//	     {
+//			for(int col=0;col< max_class;col++)
+//			{
+//			   frobenius_norm=frobenius_norm+Math.pow((wtVec[row][col]),2);
+//					  
+//            }
+//		}
+		//System.out.println("The square root"+Math.sqrt(frobenius_norm));
 		
   }
 	
@@ -376,10 +421,7 @@ try{
       
     
     
-    
-
- 
-  
+     
 	
 
 catch(Exception e)
@@ -388,11 +430,24 @@ catch(Exception e)
 	}
 
 System.out.println("created node with ID: " + result.getID()+ "\n");
+//count++;
+//if(count==N-1)
+//{
+//call(result);	
+//}
 
 	//System.out.println("Total No. of class"+ClassSet.size());
 return result;
 
 }
+	
+
+	public static int write_class_size(){
+	  c= ClassSet.size();
+	//System.out.println("\n"+ClassSet.size());
+	return c;
+	}
+
 
 	
 }
