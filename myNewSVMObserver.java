@@ -20,7 +20,7 @@ public class myNewSVMObserver implements Control{
 
 	public myNewSVMObserver(String name){
 		this.name=name;
-    threshold= 0.1;
+    threshold= 0.002;
 	this.pid = Configuration.getPid(name + "." + PAR_PROT);
 	//System.out.println(pid);
 	//protocol = Configuration.getString(name + "." + "prot", "local_model1");
