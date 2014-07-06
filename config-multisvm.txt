@@ -30,7 +30,7 @@ init.1.lambda 0.1
 init.1.iter 7
 init.1.pid 1
 
-include.init 0 
+include.init 0
 
 
 control.d0 peersim.MultiSvm.myNewSVMObserver
