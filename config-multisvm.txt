@@ -1,11 +1,11 @@
 random.seed 1234
-simulation.cycles 100
+simulation.cycles 10000
 
-network.size 4
+network.size 10
 network.node peersim.multisvm.MultiSVMCustomNode
 network.node.resourcepath C:\Users\lovey\Desktop\dataset
 
-degree 2
+degree 4
 
 protocol.link IdleProtocol
 protocol.link.cache degree
